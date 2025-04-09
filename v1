@@ -1,0 +1,137 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <random>
+#include <chrono>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 32
+
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+int leftEyeX = 30;
+int rightEyeX = 90;
+int eyeY = SCREEN_HEIGHT / 2;
+int eyeRadius = 8;
+int pupilOffsetX = 0;
+int pupilSize = eyeRadius / 2;
+int eyebrowOffset = 0;
+int targetPupilOffsetX = 0;
+int targetPupilSize = eyeRadius / 2;
+int targetEyebrowOffset = 0;
+int animationCounter = 0;
+
+unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+std::default_random_engine generator(seed);
+std::uniform_int_distribution<int> randomPupilOffset(-5, 5); // Größere Zufallsbereiche
+std::uniform_int_distribution<int> randomPupilSize(eyeRadius / 4, eyeRadius - 1);
+std::uniform_int_distribution<int> randomDelay(500, 2000); // Kürzere Verzögerungen
+
+void setup() {
+    Serial.begin(115200);
+
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println(F("SSD1306 allocation failed"));
+        for (;;);
+    }
+
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.display();
+}
+
+void drawEyes() {
+    // Augenbrauen
+    display.drawFastHLine(leftEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
+    display.drawFastHLine(rightEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
+
+    // Augen
+    display.drawCircle(leftEyeX, eyeY, eyeRadius, WHITE);
+    display.fillCircle(leftEyeX + pupilOffsetX, eyeY, pupilSize, WHITE);
+    display.drawPixel(leftEyeX + pupilOffsetX - 2, eyeY - 2, WHITE);
+
+    display.drawCircle(rightEyeX, eyeY, eyeRadius, WHITE);
+    display.fillCircle(rightEyeX + pupilOffsetX, eyeY, pupilSize, WHITE);
+    display.drawPixel(rightEyeX + pupilOffsetX - 2, eyeY - 2, WHITE);
+
+    // Mund (ändert sich)
+    if (random() % 2 == 0) {
+        display.drawFastHLine(SCREEN_WIDTH / 2 - 10, SCREEN_HEIGHT - 5, 20, WHITE);
+    } else {
+        display.drawRect(SCREEN_WIDTH / 2 - 10, SCREEN_HEIGHT - 7, 20, 5, WHITE);
+    }
+}
+
+void loop() {
+    // Schnelle, sanfte Übergänge
+    targetPupilOffsetX = randomPupilOffset(generator);
+    targetPupilSize = randomPupilSize(generator);
+    targetEyebrowOffset = randomPupilOffset(generator);
+
+    for (int i = 0; i < 10; i++) { // Schnellere Übergänge
+        pupilOffsetX += (targetPupilOffsetX - pupilOffsetX) / 10.0;
+        pupilSize += (targetPupilSize - pupilSize) / 10.0;
+        eyebrowOffset += (targetEyebrowOffset - eyebrowOffset) / 10.0;
+
+        display.clearDisplay();
+        drawEyes();
+        display.display();
+        delay(20);
+    }
+
+    // Abwechslungsreiche Animationen
+    switch (animationCounter % 5) {
+        case 0: // Schnelles Blinzeln
+            display.clearDisplay();
+            display.drawFastHLine(leftEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
+            display.drawFastHLine(rightEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
+            display.display();
+            delay(50);
+            display.clearDisplay();
+            drawEyes();
+            display.display();
+            delay(50);
+            break;
+        case 1: // Auf- und Ab-Bewegung mit Augenbrauenbewegung
+            for (int i = -3; i <= 3; i++) {
+                eyeY += i;
+                eyebrowOffset = -i;
+                display.clearDisplay();
+                drawEyes();
+                display.display();
+                eyeY = SCREEN_HEIGHT / 2;
+                delay(40);
+            }
+            break;
+        case 2: // Schnelle Pupillen- und Augenbrauenbewegung
+            pupilOffsetX = randomPupilOffset(generator) * 3;
+            eyebrowOffset = randomPupilOffset(generator) * 2;
+            display.clearDisplay();
+            drawEyes();
+            display.display();
+            delay(80);
+            break;
+        case 3: // Augen werden kurz größer und kleiner
+            pupilSize = eyeRadius;
+            display.clearDisplay();
+            drawEyes();
+            display.display();
+            delay(80);
+            pupilSize = eyeRadius / 2;
+            break;
+        case 4: //Kurzer "Wutausbruch"
+          eyebrowOffset = -6;
+          pupilOffsetX = 0;
+          display.clearDisplay();
+          drawEyes();
+          display.display();
+          delay(80);
+          eyebrowOffset = 0;
+          break;
+    }
+
+    animationCounter++;
+
+    delay(randomDelay(generator));
+}
