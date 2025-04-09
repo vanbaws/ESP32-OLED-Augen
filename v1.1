@@ -23,13 +23,16 @@ int targetPupilOffsetY = 0;
 int targetPupilSize = eyeRadius / 2;
 int targetEyebrowOffset = 0;
 int animationCounter = 0;
+bool isBlinking = false;
+int blinkTimer = 0;
 
 unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 std::default_random_engine generator(seed);
 std::uniform_int_distribution<int> randomPupilOffset(-5, 5);
 std::uniform_int_distribution<int> randomPupilSize(eyeRadius / 4, eyeRadius - 1);
-std::uniform_int_distribution<int> randomDelay(300, 1500); // Noch kürzere Verzögerungen
-std::uniform_int_distribution<int> randomDirection(0, 3); // Zufällige Richtungen
+std::uniform_int_distribution<int> randomDelay(200, 1000);
+std::uniform_int_distribution<int> randomDirection(0, 3);
+std::uniform_int_distribution<int> randomBlinkDelay(2000, 5000);
 
 void setup() {
     Serial.begin(115200);
@@ -45,16 +48,23 @@ void setup() {
 }
 
 void drawEyes() {
-    display.drawFastHLine(leftEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
-    display.drawFastHLine(rightEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
+    if (isBlinking) {
+        // Blinzelnde Augen
+        display.drawFastHLine(leftEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
+        display.drawFastHLine(rightEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
+    } else {
+        // Normale Augen
+        display.drawFastHLine(leftEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
+        display.drawFastHLine(rightEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
 
-    display.drawCircle(leftEyeX, eyeY, eyeRadius, WHITE);
-    display.fillCircle(leftEyeX + pupilOffsetX, eyeY + pupilOffsetY, pupilSize, WHITE);
-    display.drawPixel(leftEyeX + pupilOffsetX - 2, eyeY + pupilOffsetY - 2, WHITE);
+        display.drawCircle(leftEyeX, eyeY, eyeRadius, WHITE);
+        display.fillCircle(leftEyeX + pupilOffsetX, eyeY + pupilOffsetY, pupilSize, WHITE);
+        display.drawPixel(leftEyeX + pupilOffsetX - 2, eyeY + pupilOffsetY - 2, WHITE);
 
-    display.drawCircle(rightEyeX, eyeY, eyeRadius, WHITE);
-    display.fillCircle(rightEyeX + pupilOffsetX, eyeY + pupilOffsetY, pupilSize, WHITE);
-    display.drawPixel(rightEyeX + pupilOffsetX - 2, eyeY + pupilOffsetY - 2, WHITE);
+        display.drawCircle(rightEyeX, eyeY, eyeRadius, WHITE);
+        display.fillCircle(rightEyeX + pupilOffsetX, eyeY + pupilOffsetY, pupilSize, WHITE);
+        display.drawPixel(rightEyeX + pupilOffsetX - 2, eyeY + pupilOffsetY - 2, WHITE);
+    }
 
     if (random() % 2 == 0) {
         display.drawFastHLine(SCREEN_WIDTH / 2 - 10, SCREEN_HEIGHT - 5, 20, WHITE);
@@ -65,7 +75,7 @@ void drawEyes() {
 
 void moveEyesRandomly() {
     int direction = randomDirection(generator);
-    int moveAmount = random() % 5; // Zufällige Bewegungsmenge
+    int moveAmount = random() % 5;
 
     switch (direction) {
         case 0: // Links
@@ -86,20 +96,30 @@ void moveEyesRandomly() {
             break;
     }
 
-    // Sanfte Übergänge
     for (int i = 0; i < 10; i++) {
         pupilOffsetX += (targetPupilOffsetX - pupilOffsetX) / 10.0;
         pupilOffsetY += (targetPupilOffsetY - pupilOffsetY) / 10.0;
         display.clearDisplay();
         drawEyes();
         display.display();
-        delay(20);
+        delay(15);
     }
 }
 
 void loop() {
-    // Zufällige Bewegungen alle paar Durchläufe
-    if (random() % 3 == 0) {
+    // Blinzeln
+    if (blinkTimer > 0) {
+        blinkTimer--;
+        if (blinkTimer == 0) {
+            isBlinking = false;
+        }
+    } else if (random() % 1000 < 5) { // Seltenes Auslösen
+        isBlinking = true;
+        blinkTimer = 2; // Kürzeres Blinzeln
+    }
+
+    // Zufällige Bewegungen
+    if (random() % 2 == 0) {
         moveEyesRandomly();
     }
 
@@ -107,28 +127,22 @@ void loop() {
     targetEyebrowOffset = randomPupilOffset(generator);
     targetPupilSize = randomPupilSize(generator);
 
-    // Sanfte Übergänge
-    for (int i = 0; i < 10; i++) {
-        eyebrowOffset += (targetEyebrowOffset - eyebrowOffset) / 10.0;
-        pupilSize += (targetPupilSize - pupilSize) / 10.0;
+    for (int i = 0; i < 5; i++) {
+        eyebrowOffset += (targetEyebrowOffset - eyebrowOffset) / 5.0;
+        pupilSize += (targetPupilSize - pupilSize) / 5.0;
         display.clearDisplay();
         drawEyes();
         display.display();
-        delay(20);
+        delay(15);
     }
 
     // Zufällige Animationen
-    switch (random() % 5) { // Zufällige Animationen
+    switch (random() % 6) {
         case 0: // Schnelles Blinzeln
-            display.clearDisplay();
-            display.drawFastHLine(leftEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
-            display.drawFastHLine(rightEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
-            display.display();
-            delay(50);
-            display.clearDisplay();
-            drawEyes();
-            display.display();
-            delay(50);
+            if (!isBlinking) {
+                isBlinking = true;
+                blinkTimer = 3; // Noch kürzeres Blinzeln
+            }
             break;
         case 1: // Auf- und Ab-Bewegung mit Augenbrauenbewegung
             for (int i = -3; i <= 3; i++) {
@@ -138,35 +152,46 @@ void loop() {
                 drawEyes();
                 display.display();
                 eyeY = SCREEN_HEIGHT / 2;
-                delay(40);
+                delay(30);
             }
             break;
         case 2: // Schnelle Pupillen- und Augenbrauenbewegung
             pupilOffsetX = randomPupilOffset(generator) * 3;
+            pupilOffsetY = randomPupilOffset(generator) * 2;
             eyebrowOffset = randomPupilOffset(generator) * 2;
             display.clearDisplay();
             drawEyes();
             display.display();
-            delay(80);
+            delay(60);
             break;
         case 3: // Augen werden kurz größer und kleiner
             pupilSize = eyeRadius;
             display.clearDisplay();
             drawEyes();
             display.display();
-            delay(80);
+            delay(60);
             pupilSize = eyeRadius / 2;
             break;
         case 4: // Augen rollen
-            for(int i = -eyeRadius; i < eyeRadius; i++) {
+            for (int i = -eyeRadius; i <= eyeRadius; i++) {
                 pupilOffsetX = i;
                 pupilOffsetY = i;
                 display.clearDisplay();
                 drawEyes();
                 display.display();
-                delay(30);
+                delay(20);
             }
             pupilOffsetX = 0;
+            pupilOffsetY = 0;
+            break;
+        case 5: // Blick nach oben und unten
+            for (int i = -4; i <= 4; i++) {
+                pupilOffsetY = i * 2;
+                display.clearDisplay();
+                drawEyes();
+                display.display();
+                delay(30);
+            }
             pupilOffsetY = 0;
             break;
     }
