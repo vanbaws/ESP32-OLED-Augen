@@ -1,0 +1,169 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <random>
+#include <chrono>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 32
+
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+class AnimatedFace {
+public:
+    AnimatedFace(int leftEyeX, int rightEyeX, int eyeY, int eyeRadius)
+        : leftEyeX(leftEyeX), rightEyeX(rightEyeX), eyeY(eyeY), eyeRadius(eyeRadius) {}
+
+    void draw(Adafruit_SSD1306& display) {
+        if (isBlinking) {
+            display.drawFastHLine(leftEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
+            display.drawFastHLine(rightEyeX - eyeRadius, eyeY, eyeRadius * 2, WHITE);
+        } else {
+            display.drawFastHLine(leftEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
+            display.drawFastHLine(rightEyeX - eyeRadius, eyeY - eyeRadius - 2 + eyebrowOffset, eyeRadius * 2, WHITE);
+
+            display.drawCircle(leftEyeX, eyeY, eyeRadius, WHITE);
+            drawPupil(display, leftEyeX);
+
+            display.drawCircle(rightEyeX, eyeY, eyeRadius, WHITE);
+            drawPupil(display, rightEyeX);
+        }
+
+        drawMouth(display);
+    }
+
+    void update(unsigned long currentTime) {
+        if (blinkTimer > 0) {
+            if (currentTime - lastBlinkTime >= 100) {
+                blinkTimer--;
+                lastBlinkTime = currentTime;
+            }
+            if (blinkTimer == 0) {
+                isBlinking = false;
+            }
+        } else if (random(1000) < 5) {
+          isBlinking = true;
+          blinkTimer = random(1,4); // mehrfach Blinzeln
+          lastBlinkTime = currentTime;
+        }
+
+        eyebrowOffset = map(sin(currentTime / 500.0), -1, 1, -5, 5);
+        pupilSize = map(sin(currentTime / 200.0), -1, 1, eyeRadius / 4, eyeRadius - 1);
+        
+        eyeMovementStateMachine(currentTime);
+        
+        // Zufaellige Gesichtsausdrücke
+        if(random(100) == 0){
+          faceExpression = random(6); // Grimassen hinzugefügt
+        }
+    }
+
+private:
+    int leftEyeX, rightEyeX, eyeY, eyeRadius;
+    int pupilOffsetX = 0, pupilOffsetY = 0, pupilSize = eyeRadius / 2;
+    int eyebrowOffset = 0;
+    bool isBlinking = false;
+    int blinkTimer = 0;
+    unsigned long lastBlinkTime = 0;
+    int faceExpression = 0; // 0=normal, 1=traurig, 2=froehlich, 3=ueberrascht, 4=lustig 5=Grimassen
+    
+    enum EyeMovementState {
+      LOOK_LEFT,
+      LOOK_RIGHT,
+      LOOK_UP,
+      LOOK_DOWN,
+      LOOK_CENTER,
+      NO_MOVEMENT
+    };
+    
+    EyeMovementState currentEyeState = NO_MOVEMENT;
+    unsigned long stateStartTime = 0;
+    
+    void eyeMovementStateMachine(unsigned long currentTime) {
+      if (currentEyeState == NO_MOVEMENT && random(100) == 0) {
+        currentEyeState = static_cast<EyeMovementState>(random(4)); // Links, Rechts, Oben oder Unten auswählen
+        stateStartTime = currentTime;
+      }
+      
+      switch (currentEyeState) {
+        case LOOK_LEFT:
+          pupilOffsetX = -3; pupilOffsetY = 0;
+          if (currentTime - stateStartTime >= 1000) currentEyeState = LOOK_CENTER; // 1 Sekunde schauen
+          break;
+        case LOOK_RIGHT:
+          pupilOffsetX = 3; pupilOffsetY = 0;
+          if (currentTime - stateStartTime >= 1000) currentEyeState = LOOK_CENTER;
+          break;
+        case LOOK_UP:
+          pupilOffsetX = 0; pupilOffsetY = -3;
+          if (currentTime - stateStartTime >= 1000) currentEyeState = LOOK_CENTER;
+          break;
+        case LOOK_DOWN:
+          pupilOffsetX = 0; pupilOffsetY = 3;
+          if (currentTime - stateStartTime >= 1000) currentEyeState = LOOK_CENTER;
+          break;
+        case LOOK_CENTER:
+          pupilOffsetX = 0; pupilOffsetY = 0;
+          if (currentTime - stateStartTime >= 500) currentEyeState = NO_MOVEMENT; // 0.5 Sekunden zentrieren
+          break;
+        case NO_MOVEMENT:
+          break;
+      }
+    }
+
+    void drawPupil(Adafruit_SSD1306& display, int eyeX) {
+        display.fillCircle(eyeX + pupilOffsetX, eyeY + pupilOffsetY, pupilSize, WHITE);
+        display.drawPixel(eyeX + pupilOffsetX - 2, eyeY + pupilOffsetY - 2, WHITE);
+    }
+
+    void drawMouth(Adafruit_SSD1306& display){
+      switch(faceExpression){
+        case 0: display.drawFastHLine(SCREEN_WIDTH / 2 - 10, SCREEN_HEIGHT - 5, 20, WHITE); break; // Normal
+        case 1: display.drawTriangle(SCREEN_WIDTH / 2 - 10, SCREEN_HEIGHT - 3, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 8, SCREEN_WIDTH / 2 + 10, SCREEN_HEIGHT-3, WHITE); break; // Traurig
+        case 2: // Froehlich (ersetzt drawArc)
+            for(int i = -10; i <= 10; i++){
+              display.drawPixel(SCREEN_WIDTH / 2 + i, SCREEN_HEIGHT - 5 - sqrt(100 - i*i), WHITE);
+            }
+            break;
+        case 3: display.drawRect(SCREEN_WIDTH / 2-10, SCREEN_HEIGHT - 8, 20, 8, WHITE); break; // Ueberrascht
+        case 4: display.drawCircle(SCREEN_WIDTH /2 , SCREEN_HEIGHT-3, 5, WHITE); break; // Lustig
+        case 5: // Grimassen
+            if (random(2) == 0){
+                display.drawFastHLine(SCREEN_WIDTH/2 -5 , SCREEN_HEIGHT -6 , 10 , WHITE );
+                display.drawFastVLine(SCREEN_WIDTH/2 -5 , SCREEN_HEIGHT-11 , 5, WHITE);
+            } else {
+                display.drawFastHLine(SCREEN_WIDTH/2 -5 , SCREEN_HEIGHT -11 , 10 , WHITE );
+                display.drawFastVLine(SCREEN_WIDTH/2 +5 , SCREEN_HEIGHT-11 , 5, WHITE);
+            }
+
+      }
+    }
+};
+
+AnimatedFace face(30, 90, SCREEN_HEIGHT / 2, 8);
+
+void setup() {
+    Serial.begin(115200);
+
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println(F("SSD1306 allocation failed"));
+        for (;;);
+    }
+
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.display();
+    randomSeed(millis());
+}
+
+void loop() {
+    unsigned long currentTime = millis();
+    face.update(currentTime);
+
+    display.clearDisplay();
+    face.draw(display);
+    display.display();
+
+    delay(30);
+}
